@@ -87,6 +87,20 @@ class CaptchaRequiredException(LoginFailedException):
     pass
 
 
+def _to_iso_date(
+    value: Optional[Union[date, datetime, str]],
+) -> Optional[str]:
+    """
+    Normalizes a date, a datetime, or an already-ISO datestring into a
+    YYYY-MM-DD string that can be JSON-encoded for a GraphQL variable.
+    """
+    if isinstance(value, datetime):
+        return value.date().isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    return value
+
+
 class MonarchMoney(object):
     def __init__(
         self,
@@ -377,7 +391,7 @@ class MonarchMoney(object):
         )
 
     async def get_recent_account_balances(
-        self, start_date: Optional[str] = None
+        self, start_date: Optional[Union[date, datetime, str]] = None
     ) -> Dict[str, Any]:
         """
         Retrieves the daily balance for all accounts starting from `start_date`.
@@ -385,7 +399,7 @@ class MonarchMoney(object):
         If `start_date` is None, then the last 31 days are requested.
         """
         if start_date is None:
-            start_date = (date.today() - timedelta(days=31)).isoformat()
+            start_date = date.today() - timedelta(days=31)
 
         query = gql(
             """
@@ -401,7 +415,7 @@ class MonarchMoney(object):
         return await self.gql_call(
             operation="GetAccountRecentBalances",
             graphql_query=query,
-            variables={"startDate": start_date},
+            variables={"startDate": _to_iso_date(start_date)},
         )
 
     async def get_account_snapshots_by_type(self, start_date: str, timeframe: str):
@@ -443,14 +457,17 @@ class MonarchMoney(object):
 
     async def get_aggregate_snapshots(
         self,
-        start_date: Optional[date] = None,
-        end_date: Optional[date] = None,
+        start_date: Optional[Union[date, datetime, str]] = None,
+        end_date: Optional[Union[date, datetime, str]] = None,
         account_type: Optional[str] = None,
     ) -> dict:
         """
         Retrieves the daily net value of all accounts, optionally between `start_date` and `end_date`,
         and optionally only for accounts of type `account_type`.
-        Both `start_date` and `end_date` are ISO datestrings, formatted as YYYY-MM-DD
+
+        :param start_date: a `date`, a `datetime`, or an ISO datestring formatted as YYYY-MM-DD.
+            Defaults to 150 years ago today, matching the mobile app.
+        :param end_date: a `date`, a `datetime`, or an ISO datestring formatted as YYYY-MM-DD.
         """
         query = gql(
             """
@@ -468,17 +485,15 @@ class MonarchMoney(object):
             # The mobile app defaults to 150 years ago today
             # The mobile app might have a leap year bug, so instead default to setting day=1
             today = date.today()
-            start_date = date(
-                year=today.year - 150, month=today.month, day=1
-            ).isoformat()
+            start_date = date(year=today.year - 150, month=today.month, day=1)
 
         return await self.gql_call(
             operation="GetAggregateSnapshots",
             graphql_query=query,
             variables={
                 "filters": {
-                    "startDate": start_date,
-                    "endDate": end_date,
+                    "startDate": _to_iso_date(start_date),
+                    "endDate": _to_iso_date(end_date),
                     "accountType": account_type,
                 }
             },
@@ -911,9 +926,9 @@ class MonarchMoney(object):
         variables = {
             "input": {
                 "accountIds": [str(account_id)],
-                "endDate": datetime.today().strftime("%Y-%m-%d"),
+                "endDate": _to_iso_date(datetime.today()),
                 "includeHiddenHoldings": True,
-                "startDate": datetime.today().strftime("%Y-%m-%d"),
+                "startDate": _to_iso_date(datetime.today()),
             },
         }
 
@@ -1466,9 +1481,9 @@ class MonarchMoney(object):
             if last_month < 1:
                 last_month_year -= 1
                 last_month = 12
-            variables["startDate"] = datetime(
-                last_month_year, last_month, first_day_of_last_month
-            ).strftime("%Y-%m-%d")
+            variables["startDate"] = _to_iso_date(
+                datetime(last_month_year, last_month, first_day_of_last_month)
+            )
 
             # Get the last day of next month
             next_month = today.month + 1
@@ -1477,9 +1492,9 @@ class MonarchMoney(object):
                 next_month_year += 1
                 next_month = 1
             last_day_of_next_month = calendar.monthrange(next_month_year, next_month)[1]
-            variables["endDate"] = datetime(
-                next_month_year, next_month, last_day_of_next_month
-            ).strftime("%Y-%m-%d")
+            variables["endDate"] = _to_iso_date(
+                datetime(next_month_year, next_month, last_day_of_next_month)
+            )
 
         elif bool(start_date) != bool(end_date):
             raise Exception(
@@ -2028,7 +2043,7 @@ class MonarchMoney(object):
                 "icon": icon,
                 "rolloverEnabled": rollover_enabled,
                 "rolloverType": rollover_type,
-                "rolloverStartMonth": rollover_start_month.strftime("%Y-%m-%d"),
+                "rolloverStartMonth": _to_iso_date(rollover_start_month),
             },
         }
 
@@ -2932,7 +2947,7 @@ class MonarchMoney(object):
         variables = {
             "input": {
                 "rolloverEnabled": rollover_enabled,
-                "rolloverStartMonth": rollover_start_month
+                "rolloverStartMonth": _to_iso_date(rollover_start_month)
                 or self._get_start_of_current_month(),
                 "rolloverStartingBalance": rollover_starting_balance,
                 "budgetSystem": budget_system,
@@ -3744,7 +3759,7 @@ class MonarchMoney(object):
         """
         Returns the current date as a string formatted like %Y-%m-%d.
         """
-        return datetime.now().strftime("%Y-%m-%d")
+        return _to_iso_date(datetime.now())
 
     def _get_start_of_current_month(self) -> str:
         """
@@ -3752,7 +3767,7 @@ class MonarchMoney(object):
         """
         now = datetime.now()
         start_of_month = now.replace(day=1)
-        return start_of_month.strftime("%Y-%m-%d")
+        return _to_iso_date(start_of_month)
 
     def _get_end_of_current_month(self) -> str:
         """
@@ -3761,7 +3776,7 @@ class MonarchMoney(object):
         now = datetime.now()
         _, last_day = calendar.monthrange(now.year, now.month)
         end_of_month = now.replace(day=last_day)
-        return end_of_month.strftime("%Y-%m-%d")
+        return _to_iso_date(end_of_month)
 
     async def get_transaction_rules(self) -> Dict[str, Any]:
         """
