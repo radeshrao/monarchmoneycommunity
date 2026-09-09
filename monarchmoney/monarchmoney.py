@@ -2648,6 +2648,7 @@ class MonarchMoney(object):
         needs_review: Optional[bool] = None,
         reviewed: Optional[bool] = None,
         notes: Optional[str] = None,
+        owner_user_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Updates a single existing transaction as identified by the transaction_id
@@ -2683,6 +2684,8 @@ class MonarchMoney(object):
             status from a transaction, use needs_review=True.
         - notes: This parameter is only needed when the user wants to change
             the existing note.  An empty string can be passed to clear out existing notes.
+        - owner_user_id: Member ID from get_household_members() to assign as owner.
+            An empty string sets ownership to Shared. None leaves ownership unchanged.
 
         Examples:
         - To update a note: mm.update_transaction(
@@ -2798,6 +2801,8 @@ class MonarchMoney(object):
             variables["input"].update({"goalId": goal_id})
         if notes is not None:
             variables["input"].update({"notes": notes})
+        if owner_user_id is not None:
+            variables["input"].update({"ownerUserId": owner_user_id or None})
 
         return await self.gql_call(
             operation="Web_TransactionDrawerUpdateTransaction",

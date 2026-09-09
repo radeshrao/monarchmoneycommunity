@@ -362,6 +362,41 @@ class TestMonarchMoney(unittest.IsolatedAsyncioTestCase):
             "Expected needsReview filter to be True",
         )
 
+    @patch.object(Client, "execute_async")
+    async def test_update_transaction_owner(self, mock_execute_async):
+        """Assign a household member or explicitly restore Shared ownership."""
+        for owner_user_id, expected in (("user-1", "user-1"), ("", None)):
+            with self.subTest(owner_user_id=owner_user_id):
+                mock_execute_async.reset_mock()
+                await self.monarch_money.update_transaction(
+                    "txn-1", owner_user_id=owner_user_id
+                )
+                mock_execute_async.assert_called_once()
+                self.assertEqual(
+                    mock_execute_async.call_args.kwargs["variable_values"]["input"],
+                    {
+                        "id": "txn-1",
+                        "category": None,
+                        "name": None,
+                        "ownerUserId": expected,
+                    },
+                )
+
+    @patch.object(Client, "execute_async")
+    async def test_update_transaction_preserves_owner(self, mock_execute_async):
+        """Omitted or None ownership must not turn a category edit into Shared."""
+        for kwargs in ({}, {"owner_user_id": None}):
+            with self.subTest(kwargs=kwargs):
+                mock_execute_async.reset_mock()
+                await self.monarch_money.update_transaction(
+                    "txn-1", category_id="cat-1", **kwargs
+                )
+                mock_execute_async.assert_called_once()
+                self.assertEqual(
+                    mock_execute_async.call_args.kwargs["variable_values"]["input"],
+                    {"id": "txn-1", "category": "cat-1", "name": None},
+                )
+
     @patch("builtins.input", return_value="")
     @patch("getpass.getpass", return_value="")
     async def test_interactive_login(self, _input_mock, _getpass_mock):
