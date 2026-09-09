@@ -1507,6 +1507,32 @@ class MonarchMoney(object):
             variables=variables,
         )
 
+    async def get_household_members(self) -> Dict[str, Any]:
+        """
+        Gets household member IDs, names, display names, and roles.
+
+        Returns myHousehold.users with each member's id, name, displayName,
+        and householdRole. Pending invitations are not household members.
+        """
+        query = gql(
+            """
+          query Common_GetHouseHoldMemberSettings {
+            myHousehold {
+              users {
+                id
+                name
+                displayName
+                householdRole
+              }
+            }
+          }
+        """
+        )
+        return await self.gql_call(
+            operation="Common_GetHouseHoldMemberSettings",
+            graphql_query=query,
+        )
+
     async def get_subscription_details(self) -> Dict[str, Any]:
         """
         The type of subscription for the Monarch Money account.
